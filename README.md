@@ -79,6 +79,8 @@ $table->softDeletesWithAuthor();  // deleted_at y deleted_by
 Reglas que siguen valiendo (están en el comentario de cada clase):
 - **Envolver cada operación del repositorio en `DB::transaction()`** si el modelo es auditado: así no queda un cambio sin su auditoría.
 - Las consultas masivas (`Model::where()->update()` / `->delete()`) no disparan eventos: no registran autoría ni auditoría.
+- Un hecho que no es un modelo (una exportación, una descarga) se audita con `AuditLogger::recordEvent($organizationId, 'invoice.exported', 'invoice', ['rows' => 120, 'filters' => [...]])`:
+  lanza si falla, así que se llama **antes** de entregar lo pedido (no sale nada sin su constancia).
 - Hechos que ya ocurrieron fuera de tu control (por ejemplo, un comprobante que ARCA ya autorizó) se auditan con `AuditLogger::recordSafely()`, que nunca tumba la operación.
 - Los nombres de las acciones (`shipment.created`, `shipment.delivered`) y qué se audita son del servicio, no del paquete.
 

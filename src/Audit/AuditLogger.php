@@ -38,6 +38,30 @@ final class AuditLogger
     }
 
     /**
+     * Registra un hecho que no es un alta, edición ni baja de un modelo: una exportación, una descarga, una consulta sensible.
+     * `$type` es el recurso ('invoice') y la acción se nombra completa ('invoice.exported'); no tiene `auditable_id`.
+     * Lanza si falla: úsese ANTES de entregar lo pedido, así no sale nada sin su constancia.
+     *
+     * @param array<string, mixed>|null $details
+     */
+    public static function recordEvent(?int $organizationId, string $action, string $type, ?array $details = null): AuditLog
+    {
+        $request = request();
+
+        return AuditLog::create([
+            'organization_id' => $organizationId,
+            'user_id' => auth()->id(),
+            'user_name' => AuthenticatedUser::currentName(),
+            'action' => $action,
+            'auditable_type' => $type,
+            'auditable_id' => null,
+            'changes' => $details,
+            'ip_address' => $request?->ip(),
+            'user_agent' => $request ? Str::limit((string) $request->userAgent(), 250, '') : null,
+        ]);
+    }
+
+    /**
      * Igual que record(), pero sin lanzar. Para hechos que ya ocurrieron fuera de nuestro control (ej. un
      * comprobante que ARCA ya autorizó): la auditoría nunca debe tumbar esa operación. Si falla, se reporta
      * al log y a Sentry (si está) para poder reconstruir la entrada.

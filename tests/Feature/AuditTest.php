@@ -18,6 +18,11 @@ class AuditTest extends TestCase
     protected function defineRoutes($router): void
     {
         Route::post('/widgets', fn () => response()->json(['id' => Widget::create(['name' => 'Por HTTP'])->id]));
+        Route::post('/export-probe', function () {
+            AuditLogger::recordEvent(auth()->user()->organizationId(), 'invoice.exported', 'invoice', ['scope' => 'all', 'rows' => 120, 'filters' => ['customer' => 'Pérez']]);
+
+            return response()->json(['ok' => true]);
+        });
     }
 
     private function actions(): array
@@ -178,5 +183,44 @@ class AuditTest extends TestCase
         $widget->forceFill(['organization_id' => 7, 'name' => 'Raro'])->save();
 
         $this->assertSame(99, (int) AuditLog::sole()->organization_id);
+    }
+
+    public function test_an_event_without_a_model_is_recorded_with_who_where_and_what(): void
+    {
+        $this->actAs(5, 7, [], 'Ana Pérez');
+
+        $this->withHeader('User-Agent', 'Navegador/1.0')->postJson('/export-probe')->assertOk();
+
+        $log = AuditLog::sole();
+        $this->assertSame('invoice.exported', $log->action);
+        $this->assertSame('invoice', $log->auditable_type);
+        $this->assertNull($log->auditable_id);
+        $this->assertSame(7, (int) $log->organization_id);
+        $this->assertSame(5, (int) $log->user_id);
+        $this->assertSame('Ana Pérez', $log->user_name);
+        $this->assertSame(['scope' => 'all', 'rows' => 120, 'filters' => ['customer' => 'Pérez']], $log->changes);
+        $this->assertSame('127.0.0.1', $log->ip_address);
+        $this->assertSame('Navegador/1.0', $log->user_agent);
+    }
+
+    public function test_an_event_fails_loudly_so_nothing_is_delivered_without_its_record(): void
+    {
+        $this->actAs(5, 7);
+        Schema::drop('audit_logs');
+
+        $this->expectException(\Throwable::class);
+
+        AuditLogger::recordEvent(7, 'invoice.exported', 'invoice', ['rows' => 1]);
+    }
+
+    public function test_an_event_can_be_recorded_from_the_console_without_a_person(): void
+    {
+        $this->actAsNobody();
+
+        $log = AuditLogger::recordEvent(null, 'report.generated', 'report');
+
+        $this->assertNull($log->user_id);
+        $this->assertNull($log->organization_id);
+        $this->assertNull($log->changes);
     }
 }
